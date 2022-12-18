@@ -81,7 +81,9 @@ public:
 	virtual void BeginPlay() override;
 
 	/*
-		이동 요청을 하기전에 반드시 UMyPathFollowingComponent가 세팅되어야 합니다.
+		* 이동 요청을 하기전에 반드시 UMyPathFollowingComponent가 세팅되어야 합니다.
+		기본적으로 OnRegister에서 Owner로부터 UMyPathFollowingComponent를 탐색합니다.
+		@ref URequestMoveComponent::OnRegister()
 	*/
 	void SetPathFollowingComponent(TObjectPtr<UMyPathFollowingComponent> InPathFollowingComponent);
 	bool HasPathFollowingComponent() const;
@@ -94,7 +96,7 @@ public:
 	bool IsPathFollowing() const;
 
 	/*
-		Blueprint용
+		Blueprint
 	*/
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Move To Location", ScriptName = "MoveToLocation"))
 		EPathFollowingRequestResult::Type K2_MoveToLocation(const FVector& InDestination, FRequestMoveParams InMoveParams);
@@ -102,14 +104,14 @@ public:
 		EPathFollowingRequestResult::Type K2_MoveToActor(AActor* InGoal, FRequestMoveParams InMoveParams);
 
 	/*
-		이동 요청 인터페이스
+		Request Move Interfaces
 	*/
 	EPathFollowingRequestResult::Type MoveToLocation(const FVector& InDestination, const FRequestMoveParams& InMoveParams);
 	EPathFollowingRequestResult::Type MoveToActor(AActor* InGoal, const FRequestMoveParams& InMoveParams);
 	FPathFollowingRequestResult MoveTo(const FAIMoveRequest& MoveRequest, FNavPathSharedPtr* OutPath = nullptr);
 
 	/*
-		이동 종료 인터페이스
+		Stop Movement Interfaces
 	*/
 	void StopMovement(FAIRequestID InRequestID, EPathFollowingVelocityMode InVelocityMode = EPathFollowingVelocityMode::Keep);
 	void StopCurrentMovement(EPathFollowingVelocityMode InVelocityMode = EPathFollowingVelocityMode::Keep);
@@ -129,6 +131,10 @@ private:
 		FPathFindingQuery 세팅
 	*/
 	bool BuildPathfindingQuery(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery) const;
+
+	/*
+		길 찾기 수행
+	*/
 	void FindPathForMoveRequest(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery, FNavPathSharedPtr& OutPath) const;
 
 	TObjectPtr<APawn> GetPawn() const;

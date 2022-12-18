@@ -46,6 +46,10 @@ public:
 	virtual void CalcVelocity(float InDeltaTime, float InFriction, bool bFluid, float InBrakingDeceleration) override;
 
 private:
+	/*
+		 - if true, Regardless 'GroundFriction', apply maximum ground friction.
+		 @ref UMyCharacterMovementComponent::CalcVelocity
+	*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Movement: Walking", meta = (AllowPrivateAccess = "true", DisplayName = "Use Max Friction"))
 		bool m_UseMaxFriction;
 };
