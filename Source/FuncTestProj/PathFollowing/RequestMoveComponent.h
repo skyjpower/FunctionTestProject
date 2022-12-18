@@ -116,11 +116,14 @@ public:
 
 #pragma endregion // request move interface
 
+protected:
+	virtual void OnRegister() override;
+
 private:
 	/*
 		이동을 요청하기 전에 해야할 작업 수행
 	*/
-	void ProcessBeforeRequestMove(bool InStopCurrentMovement);
+	void ProcessBeforeRequestMove();
 
 	/*
 		FPathFindingQuery 세팅

@@ -26,16 +26,16 @@ class AFuncTestProjCharacter : public ACharacter
 		Custom Path Following Component
 	*/
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Move, meta = (AllowPrivateAccess = "true"))
-		TObjectPtr<UMyPathFollowingComponent> PathFollowingComponent;
+		TObjectPtr<UMyPathFollowingComponent> m_PathFollowingComponent;
 
 	/*
 		Request path following component
 	*/
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Move, meta = (AllowPrivateAccess = "true"))
-		TObjectPtr<URequestMoveComponent> RequestMoveComponent;
+		TObjectPtr<URequestMoveComponent> m_RequestMoveComponent;
 
 public:
-	AFuncTestProjCharacter();
+	AFuncTestProjCharacter(const FObjectInitializer& InObjectInitializer);
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Input)

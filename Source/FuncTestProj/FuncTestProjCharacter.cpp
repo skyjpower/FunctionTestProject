@@ -10,11 +10,13 @@
 
 #include "FuncTestProj/PathFollowing/MyPathFollowingComponent.h"
 #include "FuncTestProj/PathFollowing/RequestMoveComponent.h"
+#include "FuncTestProj/MyCharacterMovementComponent.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AFuncTestProjCharacter
 
-AFuncTestProjCharacter::AFuncTestProjCharacter()
+AFuncTestProjCharacter::AFuncTestProjCharacter(const FObjectInitializer& InObjectInitializer)
+	: Super(InObjectInitializer.SetDefaultSubobjectClass<UMyCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -53,9 +55,10 @@ AFuncTestProjCharacter::AFuncTestProjCharacter()
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 
-	PathFollowingComponent = CreateDefaultSubobject<UMyPathFollowingComponent>(TEXT("MyPathFollowingComponent"));
-	RequestMoveComponent = CreateDefaultSubobject<URequestMoveComponent>(TEXT("URequestMoveComponent"));
-	RequestMoveComponent->SetPathFollowingComponent(PathFollowingComponent);
+	m_PathFollowingComponent = CreateDefaultSubobject<UMyPathFollowingComponent>(TEXT("MyPathFollowingComponent"));
+
+	m_RequestMoveComponent = CreateDefaultSubobject<URequestMoveComponent>(TEXT("URequestMoveComponent"));
+	m_RequestMoveComponent->SetPathFollowingComponent(m_PathFollowingComponent);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -119,9 +122,9 @@ void AFuncTestProjCharacter::MoveForward(float Value)
 		AddMovementInput(Direction, Value);
 
 		// user input
-		if (RequestMoveComponent != nullptr && RequestMoveComponent->IsPathFollowing() == true)
+		if (m_RequestMoveComponent != nullptr && m_RequestMoveComponent->IsPathFollowing() == true)
 		{
-			RequestMoveComponent->StopCurrentMovement();
+			m_RequestMoveComponent->StopCurrentMovement();
 		}
 	}
 }
@@ -140,9 +143,9 @@ void AFuncTestProjCharacter::MoveRight(float Value)
 		AddMovementInput(Direction, Value);
 
 		// user input
-		if (RequestMoveComponent != nullptr && RequestMoveComponent->IsPathFollowing() == true)
+		if (m_RequestMoveComponent != nullptr && m_RequestMoveComponent->IsPathFollowing() == true)
 		{
-			RequestMoveComponent->StopCurrentMovement();
+			m_RequestMoveComponent->StopCurrentMovement();
 		}
 	}
 }

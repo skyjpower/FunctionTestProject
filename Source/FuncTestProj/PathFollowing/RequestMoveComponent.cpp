@@ -3,7 +3,8 @@
 
 #include "RequestMoveComponent.h"
 
-#include "NavigationSystem.h"
+#include "FuncTestProj/System/MyFunctionHelpers.h"
+#include "FuncTestProj/PathFollowing/MyNavigationSystem.h"
 
 URequestMoveComponent::URequestMoveComponent()
 	: m_CachePathFollowingComponent(nullptr)
@@ -78,8 +79,7 @@ EPathFollowingRequestResult::Type URequestMoveComponent::MoveToActor(AActor* InG
 
 FPathFollowingRequestResult URequestMoveComponent::MoveTo(const FAIMoveRequest& MoveRequest, FNavPathSharedPtr* OutPath)
 {
-	const bool bStopCurrentMovement = true;
-	ProcessBeforeRequestMove(bStopCurrentMovement);
+	ProcessBeforeRequestMove();
 
 	FPathFollowingRequestResult ResultData;
 	ResultData.Code = EPathFollowingRequestResult::Failed;
@@ -198,12 +198,25 @@ void URequestMoveComponent::StopCurrentMovement(EPathFollowingVelocityMode InVel
 	m_CachePathFollowingComponent->AbortMove(*this, FPathFollowingResultFlags::MovementStop | FPathFollowingResultFlags::ForcedScript, FAIRequestID::CurrentRequest, InVelocityMode);
 }
 
-void URequestMoveComponent::ProcessBeforeRequestMove(bool InStopCurrentMovement)
+// protected ====
+void URequestMoveComponent::OnRegister()
 {
-	if (InStopCurrentMovement == true)
+	Super::OnRegister();
+
+	// Find PathFollowingComponent
+	m_CachePathFollowingComponent.Reset();
+
+	TObjectPtr<AActor> OwnerActor = GetOwner();
+	if (OwnerActor != nullptr)
 	{
-		StopCurrentMovement();
+		m_CachePathFollowingComponent = Cast<UMyPathFollowingComponent>(OwnerActor->GetComponentByClass(UMyPathFollowingComponent::StaticClass()));
 	}
+}
+
+// private ====
+void URequestMoveComponent::ProcessBeforeRequestMove()
+{
+
 }
 
 bool URequestMoveComponent::BuildPathfindingQuery(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery) const
@@ -256,10 +269,10 @@ void URequestMoveComponent::FindPathForMoveRequest(const FAIMoveRequest& InMoveR
 {
 	SCOPE_CYCLE_COUNTER(STAT_AI_Overall);
 
-	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-	if (NavSys != nullptr)
+	TObjectPtr<UMyNavigationSystem> MyNavSystem = UMyFunctionHelpers::GetInstance<UMyNavigationSystem>(GetWorld());
+	if (MyNavSystem != nullptr)
 	{
-		FPathFindingResult PathResult = NavSys->FindPathSync(InQuery);
+		FPathFindingResult PathResult = MyNavSystem->FindPathSync(InQuery);
 		if (PathResult.Result != ENavigationQueryResult::Error)
 		{
 			if (PathResult.IsSuccessful() && PathResult.Path.IsValid())
