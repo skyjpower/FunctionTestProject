@@ -6,12 +6,77 @@
 #include "FuncTestProj/System/MyFunctionHelpers.h"
 #include "FuncTestProj/PathFollowing/MyNavigationSystem.h"
 
+#pragma region FRequestAsyncMoveParams
+FRequestAsyncMoveParams::FRequestAsyncMoveParams()
+	: QueryID(INVALID_NAVQUERYID)
+{
+
+}
+bool FRequestAsyncMoveParams::IsValid() const
+{
+	return QueryID != INVALID_NAVQUERYID;
+}
+
+void FRequestAsyncMoveParams::Clear()
+{
+	QueryID = INVALID_NAVQUERYID;
+	MoveRequest = FAIMoveRequest();
+}
+#pragma endregion
+
+#pragma region FRequestAsyncMoveResult
+FRequestAsyncMoveResult::FRequestAsyncMoveResult()
+	: QueryID(INVALID_NAVQUERYID)
+	, Code(EPathFollowingRequestResult::Failed)
+	, MoveId(FAIRequestID::InvalidRequest)
+{
+
+}
+
+bool FRequestAsyncMoveResult::IsRequestSuccessful() const
+{
+	return Code == EPathFollowingRequestResult::RequestSuccessful;
+}
+
+bool FRequestAsyncMoveResult::IsAlreadyAtGoal() const
+{
+	return Code == EPathFollowingRequestResult::AlreadyAtGoal;
+}
+
+bool FRequestAsyncMoveResult::IsFailure() const
+{
+	return Code == EPathFollowingRequestResult::Failed;
+}
+
+FString FRequestAsyncMoveResult::ToString() const
+{
+	FString CodeStr = TEXT("");
+	if (IsRequestSuccessful() == true)
+	{
+		CodeStr = TEXT("RequestSuccessful");
+	}
+
+	else if (IsAlreadyAtGoal() == true)
+	{
+		CodeStr = TEXT("AlreadyAtGoal");
+	}
+
+	else
+	{
+		CodeStr = TEXT("Failed");
+	}
+
+	return FString::Printf(TEXT("QueryID[%d], RequestResult[%s], MoveId[%d]"), QueryID, *CodeStr, MoveId.GetID());
+}
+
+#pragma endregion
+
+
 URequestMoveComponent::URequestMoveComponent()
 	: m_CachePathFollowingComponent(nullptr)
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
-
 
 // Called when the game starts
 void URequestMoveComponent::BeginPlay()
@@ -48,6 +113,24 @@ EPathFollowingRequestResult::Type URequestMoveComponent::K2_MoveToLocation(const
 EPathFollowingRequestResult::Type URequestMoveComponent::K2_MoveToActor(AActor* InGoal, FRequestMoveParams InMoveParams)
 {
 	return MoveToActor(InGoal, InMoveParams);
+}
+
+EPathFollowingRequestResult::Type URequestMoveComponent::K2_MoveToLocationAsync(const FVector& InDestination, FRequestMoveParams InMoveParams)
+{
+	FRequestAsyncMoveResult Result = MoveToLocationAsync(InDestination, InMoveParams);
+
+	// UE_LOG(LogClass, Log, TEXT("URequestMoveComponent::MoveToLocationAsync[BP]() : %s"), *Result.ToString());
+
+	return Result.Code;
+}
+
+EPathFollowingRequestResult::Type URequestMoveComponent::K2_MoveToActorAsync(AActor* InGoal, FRequestMoveParams InMoveParams)
+{
+	FRequestAsyncMoveResult Result = MoveToActorAsync(InGoal, InMoveParams);
+
+	// UE_LOG(LogClass, Log, TEXT("URequestMoveComponent::MoveToLocationAsync[BP]() : %s"), *Result.ToString());
+
+	return Result.Code;
 }
 
 EPathFollowingRequestResult::Type URequestMoveComponent::MoveToLocation(const FVector& InDestination, const FRequestMoveParams& InMoveParams)
@@ -104,39 +187,11 @@ FPathFollowingRequestResult URequestMoveComponent::MoveTo(const FAIMoveRequest& 
 		return ResultData;
 	}
 
-	bool bCanRequestMove = true;
+	bool bCanRequestMove = ProcessCanRequestMove(MoveRequest);
 	bool bAlreadyAtGoal = false;
-
-	if (!MoveRequest.IsMoveToActorRequest() == true)
+	if (bCanRequestMove == true)
 	{
-		if (MoveRequest.GetGoalLocation().ContainsNaN() || FAISystem::IsValidLocation(MoveRequest.GetGoalLocation()) == false)
-		{
-			UE_LOG(LogClass, Error, TEXT("URequestMoveComponent::MoveTo: Destination is not valid! Goal(%s)"), TEXT_AI_LOCATION(MoveRequest.GetGoalLocation()));
-			bCanRequestMove = false;
-		}
-
-		if (bCanRequestMove == true && MoveRequest.IsProjectingGoal() == true)
-		{
-			UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-			const FNavAgentProperties& AgentProps = GetNavAgentPropertiesRef();
-			FNavLocation ProjectedLocation;
-
-			if (NavSys && !NavSys->ProjectPointToNavigation(MoveRequest.GetGoalLocation(), ProjectedLocation, INVALID_NAVEXTENT, &AgentProps))
-			{
-				UE_LOG(LogClass, Error, TEXT("Fail to project point to navigation. location is [%s]"), *MoveRequest.GetGoalLocation().ToString());
-
-				bCanRequestMove = false;
-			}
-
-			MoveRequest.UpdateGoalLocation(ProjectedLocation.Location);
-		}
-
-		bAlreadyAtGoal = bCanRequestMove && PathFollowingComponent->HasReached(MoveRequest);
-	}
-
-	else
-	{
-		bAlreadyAtGoal = bCanRequestMove && PathFollowingComponent->HasReached(MoveRequest);
+		bAlreadyAtGoal = CheckAlreadyAtGoal(MoveRequest);
 	}
 
 	if (bAlreadyAtGoal == true)
@@ -178,6 +233,110 @@ FPathFollowingRequestResult URequestMoveComponent::MoveTo(const FAIMoveRequest& 
 	return ResultData;
 }
 
+FRequestAsyncMoveResult URequestMoveComponent::MoveToLocationAsync(const FVector& InDestination, const FRequestMoveParams& InMoveParams)
+{
+	FAIMoveRequest MoveReq(InDestination);
+	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
+	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
+	MoveReq.SetProjectGoalLocation(InMoveParams.ProjectDestinationToNavigation);
+	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
+	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
+	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
+	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
+
+	return MoveToAsync(MoveReq);
+}
+
+FRequestAsyncMoveResult URequestMoveComponent::MoveToActorAsync(AActor* InGoal, const FRequestMoveParams& InMoveParams)
+{
+	FAIMoveRequest MoveReq(InGoal);
+	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
+	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
+	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
+	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
+	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
+	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
+
+	return MoveToAsync(MoveReq);
+}
+
+FRequestAsyncMoveResult URequestMoveComponent::MoveToAsync(const FAIMoveRequest& MoveRequest)
+{
+	ProcessBeforeRequestMove();
+
+	// 현재 수행 중인 비동기 Query ID 종료
+	AbortAsyncNavQuery();
+
+	FRequestAsyncMoveResult ResultData;
+	ResultData.Code = EPathFollowingRequestResult::Failed;
+
+	if (MoveRequest.IsValid() == false)
+	{
+		return ResultData;
+	}
+
+	if (HasPathFollowingComponent() == false)
+	{
+		UE_LOG(LogClass, Error, TEXT("MoveTo request failed due missing PathFollowingComponent"));
+		return ResultData;
+	}
+
+	UMyPathFollowingComponent* PathFollowingComponent = m_CachePathFollowingComponent.Get();
+
+	TObjectPtr<APawn> Pawn = GetPawn();
+	if (Pawn == nullptr || Pawn->IsValidLowLevel() == false)
+	{
+		UE_LOG(LogClass, Error, TEXT("Owner pawn[APawn] is invalid"));
+		return ResultData;
+	}
+
+	bool bCanRequestMove = ProcessCanRequestMove(MoveRequest);
+	bool bAlreadyAtGoal = false;
+	if (bCanRequestMove == true)
+	{
+		bAlreadyAtGoal = CheckAlreadyAtGoal(MoveRequest);
+	}
+
+	if (bAlreadyAtGoal == true)
+	{
+		ResultData.MoveId = PathFollowingComponent->RequestMoveWithImmediateFinish(EPathFollowingResult::Success);
+		ResultData.Code = EPathFollowingRequestResult::AlreadyAtGoal;
+	}
+
+	else if(bCanRequestMove == true)
+	{
+		// 비동기 길 찾기 요청
+		TObjectPtr<UMyNavigationSystem> MyNavSystem = UMyFunctionHelpers::GetInstance<UMyNavigationSystem>(GetWorld());
+		if (MyNavSystem != nullptr)
+		{
+			FPathFindingQuery PFQuery;
+			const bool bValidQuery = BuildPathfindingQuery(MoveRequest, PFQuery);
+			if (bValidQuery == true)
+			{
+				uint32&& AsyncQueryID = MyNavSystem->FindPathAsync(GetNavAgentPropertiesRef(), PFQuery, FNavPathQueryDelegate::CreateUObject(this, &URequestMoveComponent::OnPathFindingAsync));
+				if (AsyncQueryID != INVALID_NAVQUERYID)
+				{
+					ResultData.QueryID = AsyncQueryID;
+					ResultData.Code = EPathFollowingRequestResult::RequestSuccessful;
+				}
+			}
+		}
+
+		else
+		{ 
+			UE_LOG(LogClass, Error, TEXT("Fail to get [UMyNavigationSystem]"));
+		}
+	}
+
+	if (ResultData.Code == EPathFollowingRequestResult::RequestSuccessful)
+	{
+		m_AsyncMoveParams.QueryID = ResultData.QueryID;
+		m_AsyncMoveParams.MoveRequest = MoveRequest;
+	}
+
+	return ResultData;
+}
+
 void URequestMoveComponent::StopMovement(FAIRequestID InRequestID, EPathFollowingVelocityMode InVelocityMode)
 {
 	if (m_CachePathFollowingComponent.IsValid() == false)
@@ -190,12 +349,66 @@ void URequestMoveComponent::StopMovement(FAIRequestID InRequestID, EPathFollowin
 
 void URequestMoveComponent::StopCurrentMovement(EPathFollowingVelocityMode InVelocityMode)
 {
+	AbortAsyncNavQuery();
+
 	if (m_CachePathFollowingComponent.IsValid() == false)
 	{
 		return;
 	}
 
 	m_CachePathFollowingComponent->AbortMove(*this, FPathFollowingResultFlags::MovementStop | FPathFollowingResultFlags::ForcedScript, FAIRequestID::CurrentRequest, InVelocityMode);
+}
+
+void URequestMoveComponent::AbortAsyncNavQuery()
+{
+	if (m_AsyncMoveParams.IsValid() == true)
+	{
+		TObjectPtr<UMyNavigationSystem> MyNavSystem = UMyFunctionHelpers::GetInstance<UMyNavigationSystem>(GetWorld());
+		if (MyNavSystem != nullptr)
+		{
+			MyNavSystem->AbortAsyncFindPathRequest(m_AsyncMoveParams.QueryID);
+		}
+		m_AsyncMoveParams.Clear();
+	}
+}
+
+bool URequestMoveComponent::ProcessCanRequestMove(const FAIMoveRequest& InMoveRequest)
+{
+	bool bCanRequestMove = true;
+	if (!InMoveRequest.IsMoveToActorRequest() == true)
+	{
+		if (InMoveRequest.GetGoalLocation().ContainsNaN() || FAISystem::IsValidLocation(InMoveRequest.GetGoalLocation()) == false)
+		{
+			UE_LOG(LogClass, Error, TEXT("URequestMoveComponent::MoveTo: Destination is not valid! Goal(%s)"), TEXT_AI_LOCATION(InMoveRequest.GetGoalLocation()));
+			bCanRequestMove = false;
+		}
+
+		if (bCanRequestMove == true && InMoveRequest.IsProjectingGoal() == true)
+		{
+			UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+			const FNavAgentProperties& AgentProps = GetNavAgentPropertiesRef();
+			FNavLocation ProjectedLocation;
+
+			if (NavSys && !NavSys->ProjectPointToNavigation(InMoveRequest.GetGoalLocation(), ProjectedLocation, INVALID_NAVEXTENT, &AgentProps))
+			{
+				UE_LOG(LogClass, Error, TEXT("Fail to project point to navigation. location is [%s]"), *InMoveRequest.GetGoalLocation().ToString());
+
+				bCanRequestMove = false;
+			}
+
+			InMoveRequest.UpdateGoalLocation(ProjectedLocation.Location);
+		}
+	}
+	return bCanRequestMove;
+}
+
+bool URequestMoveComponent::CheckAlreadyAtGoal(const FAIMoveRequest& InMoveRequest)
+{
+	if (m_CachePathFollowingComponent.IsValid() == false || m_CachePathFollowingComponent->IsValidLowLevel() == false)
+	{
+		return false;
+	}
+	return m_CachePathFollowingComponent->HasReached(InMoveRequest);
 }
 
 // protected ====
@@ -213,13 +426,20 @@ void URequestMoveComponent::OnRegister()
 	}
 }
 
+void URequestMoveComponent::OnUnregister()
+{
+	AbortAsyncNavQuery();
+
+	Super::OnUnregister();
+}
+
 // private ====
 void URequestMoveComponent::ProcessBeforeRequestMove()
 {
 
 }
 
-bool URequestMoveComponent::BuildPathfindingQuery(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery) const
+bool URequestMoveComponent::BuildPathfindingQuery(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& OutQuery) const
 {
 	bool bResult = false;
 
@@ -246,12 +466,12 @@ bool URequestMoveComponent::BuildPathfindingQuery(const FAIMoveRequest& InMoveRe
 		}
 
 		FSharedConstNavQueryFilter NavFilter = UNavigationQueryFilter::GetQueryFilter(*NavData, this, InMoveRequest.GetNavigationFilter());
-		InQuery = FPathFindingQuery(GetPawn(), *NavData, GetNavAgentLocation(), GoalLocation, NavFilter);
-		InQuery.SetAllowPartialPaths(InMoveRequest.IsUsingPartialPaths());
+		OutQuery = FPathFindingQuery(GetPawn(), *NavData, GetNavAgentLocation(), GoalLocation, NavFilter);
+		OutQuery.SetAllowPartialPaths(InMoveRequest.IsUsingPartialPaths());
 
 		if (m_CachePathFollowingComponent.IsValid() == true)
 		{
-			m_CachePathFollowingComponent->OnPathfindingQuery(InQuery);
+			m_CachePathFollowingComponent->OnPathfindingQuery(OutQuery);
 		}
 
 		bResult = true;
@@ -286,6 +506,52 @@ void URequestMoveComponent::FindPathForMoveRequest(const FAIMoveRequest& InMoveR
 				OutPath = PathResult.Path;
 			}
 		}
+	}
+}
+
+void URequestMoveComponent::OnPathFindingAsync(uint32 InQueryID, ENavigationQueryResult::Type InResult, FNavPathSharedPtr InPath)
+{
+	if (m_AsyncMoveParams.QueryID == InQueryID)
+	{
+		m_AsyncMoveParams.Clear();
+
+		if (m_CachePathFollowingComponent.IsValid() == true)
+		{
+			if (InPath.IsValid() == true)
+			{
+				const FAIRequestID RequestID = m_CachePathFollowingComponent->RequestMove(m_AsyncMoveParams.MoveRequest, InPath);
+				if (RequestID.IsValid() == true)
+				{
+					// UE_LOG(LogClass, Log, TEXT("URequestMoveComponent::OnPathFindingAsync() : Success to request move"));
+
+					TObjectPtr<UMyNavigationSystem> MyNavSystem = UMyFunctionHelpers::GetInstance<UMyNavigationSystem>(GetWorld());
+					if (MyNavSystem != nullptr)
+					{
+						MyNavSystem->DrawPath(InPath);
+					}
+				}
+
+				else
+				{
+					UE_LOG(LogClass, Log, TEXT("URequestMoveComponent::OnPathFindingAsync() : Fail to request move"));
+				}
+			}
+
+			else
+			{
+				UE_LOG(LogClass, Warning, TEXT("URequestMoveComponent::OnPathFindingAsync() : Invalid Path"));
+			}
+		}
+
+		else
+		{
+			UE_LOG(LogClass, Warning, TEXT("URequestMoveComponent::OnPathFindingAsync() : Invalid [UMyPathFollowingComponent]"));
+		}
+	}
+
+	else
+	{
+		UE_LOG(LogClass, Log, TEXT("URequestMoveComponent::OnPathFindingAsync() : QueryID[%d] CurrentQueryID[%d], ignore"), InQueryID, m_AsyncMoveParams.QueryID);
 	}
 }
 

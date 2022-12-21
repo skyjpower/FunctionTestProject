@@ -61,6 +61,11 @@ AFuncTestProjCharacter::AFuncTestProjCharacter(const FObjectInitializer& InObjec
 	m_RequestMoveComponent->SetPathFollowingComponent(m_PathFollowingComponent);
 }
 
+TObjectPtr<URequestMoveComponent> AFuncTestProjCharacter::GetRequestMoveComponent() const
+{
+	return m_RequestMoveComponent;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Input
 

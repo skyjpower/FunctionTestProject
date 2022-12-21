@@ -25,14 +25,16 @@ public:
 	virtual void Release() override;
 	//~ UMyObject interface end
 
-public:
 	TObjectPtr<UNavigationSystemV1> GetNavigationSystem() const;
 
 	// UNavigationSystemV1 interfaces
 	FPathFindingResult FindPathSync(FPathFindingQuery InQuery, EPathFindingMode::Type InMode = EPathFindingMode::Regular);
+	uint32 FindPathAsync(const FNavAgentProperties& AgentProperties, FPathFindingQuery Query, const FNavPathQueryDelegate& ResultDelegate, EPathFindingMode::Type Mode = EPathFindingMode::Regular);
+	void AbortAsyncFindPathRequest(const uint32 InAsynPathQueryID);
 
 	// Debug
 	void DrawDebugPath(bool InFlag, float InLifeTime);
+	void DrawPath(FNavPathSharedPtr InPath);
 
 public:
 	static bool m_DrawDebugPath;

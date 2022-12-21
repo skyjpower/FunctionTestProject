@@ -69,6 +69,55 @@ public:
 		bool AllowPartialPaths;
 };
 
+/*
+	비동기 길 찾기 요청 캐싱용
+*/
+struct FRequestAsyncMoveParams
+{
+public:
+	FRequestAsyncMoveParams();
+
+	bool IsValid() const;
+	void Clear();
+
+public:
+	uint32 QueryID;
+	FAIMoveRequest MoveRequest;
+};
+
+/*
+	비동기 길 찾기 요청
+*/
+struct FRequestAsyncMoveResult
+{
+public:
+	FRequestAsyncMoveResult();
+
+	/*
+		QueryID	: not INVALID_NAVQUERYID
+		Code	: EPathFollowingRequestResult::RequestSuccessful
+	*/
+	bool IsRequestSuccessful() const;
+	/*
+		QueryID	: INVALID_NAVQUERYID
+		Code	: EPathFollowingRequestResult::AlreadyAtGoal
+	*/
+	bool IsAlreadyAtGoal() const;
+	/*
+		QueryID	: INVALID_NAVQUERYID
+		Code	: EPathFollowingRequestResult::Fail
+	*/
+	bool IsFailure() const;
+
+	// debug
+	FString ToString() const;
+
+public:
+	uint32 QueryID;
+	EPathFollowingRequestResult::Type Code;
+	FAIRequestID MoveId;
+};
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class FUNCTESTPROJ_API URequestMoveComponent : public UActorComponent
 {
@@ -102,6 +151,10 @@ public:
 		EPathFollowingRequestResult::Type K2_MoveToLocation(const FVector& InDestination, FRequestMoveParams InMoveParams);
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Move To Actor", ScriptName = "MoveToActor"))
 		EPathFollowingRequestResult::Type K2_MoveToActor(AActor* InGoal, FRequestMoveParams InMoveParams);
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Move To Location Async", ScriptName = "MoveToLocationAsync"))
+		EPathFollowingRequestResult::Type K2_MoveToLocationAsync(const FVector& InDestination, FRequestMoveParams InMoveParams);
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Move To Actor Async", ScriptName = "MoveToActorAsync"))
+		EPathFollowingRequestResult::Type K2_MoveToActorAsync(AActor* InGoal, FRequestMoveParams InMoveParams);
 
 	/*
 		Request Move Interfaces
@@ -111,15 +164,27 @@ public:
 	FPathFollowingRequestResult MoveTo(const FAIMoveRequest& MoveRequest, FNavPathSharedPtr* OutPath = nullptr);
 
 	/*
+		Request Move Async Interfaces
+	*/
+	FRequestAsyncMoveResult MoveToLocationAsync(const FVector& InDestination, const FRequestMoveParams& InMoveParams);
+	FRequestAsyncMoveResult MoveToActorAsync(AActor* InGoal, const FRequestMoveParams& InMoveParams);
+	FRequestAsyncMoveResult MoveToAsync(const FAIMoveRequest& MoveRequest);
+
+	/*
 		Stop Movement Interfaces
 	*/
 	void StopMovement(FAIRequestID InRequestID, EPathFollowingVelocityMode InVelocityMode = EPathFollowingVelocityMode::Keep);
 	void StopCurrentMovement(EPathFollowingVelocityMode InVelocityMode = EPathFollowingVelocityMode::Keep);
+	void AbortAsyncNavQuery();
 
 #pragma endregion // request move interface
 
+	bool ProcessCanRequestMove(const FAIMoveRequest& InMoveRequest);
+	bool CheckAlreadyAtGoal(const FAIMoveRequest& InMoveRequest);
+
 protected:
 	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
 
 private:
 	/*
@@ -130,12 +195,17 @@ private:
 	/*
 		FPathFindingQuery 세팅
 	*/
-	bool BuildPathfindingQuery(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery) const;
+	bool BuildPathfindingQuery(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& OutQuery) const;
 
 	/*
 		길 찾기 수행
 	*/
 	void FindPathForMoveRequest(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery, FNavPathSharedPtr& OutPath) const;
+
+	/*
+		비동기 길 찾기 완료 콜백
+	*/
+	void OnPathFindingAsync(uint32 InQueryID, ENavigationQueryResult::Type InResult, FNavPathSharedPtr InPath);
 
 	TObjectPtr<APawn> GetPawn() const;
 	const FNavAgentProperties& GetNavAgentPropertiesRef() const;
@@ -143,4 +213,7 @@ private:
 
 private:
 	TWeakObjectPtr<UMyPathFollowingComponent> m_CachePathFollowingComponent;
+
+	// 비동기 길 찾기 데이터 캐싱
+	FRequestAsyncMoveParams m_AsyncMoveParams;
 };

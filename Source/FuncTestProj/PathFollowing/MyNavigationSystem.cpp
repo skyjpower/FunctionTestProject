@@ -47,22 +47,60 @@ FPathFindingResult UMyNavigationSystem::FindPathSync(FPathFindingQuery InQuery, 
 	{
 		if (Result.IsSuccessful() == true)
 		{
-			if (InQuery.NavData.IsValid() == true)
-			{
-				const FColor DebugColor = FColor::White;
-				const bool bPersistent = false;
-
-				// draw path
-				Result.Path->DebugDraw(InQuery.NavData.Get(), DebugColor, nullptr, bPersistent, m_DrawDebugLifeTime);
-			}
+			DrawPath(Result.Path);
 		}
 	}
 
 	return Result;
 }
 
+uint32 UMyNavigationSystem::FindPathAsync(const FNavAgentProperties& AgentProperties, FPathFindingQuery Query, const FNavPathQueryDelegate& ResultDelegate, EPathFindingMode::Type Mode)
+{
+	uint32 AsyncID(INVALID_NAVQUERYID);
+
+	TObjectPtr<UNavigationSystemV1> NavSys = GetNavigationSystem();
+	if (NavSys != nullptr)
+	{
+		AsyncID = NavSys->FindPathAsync(AgentProperties, Query, ResultDelegate, Mode);
+	}
+
+	return AsyncID;
+}
+
+void UMyNavigationSystem::AbortAsyncFindPathRequest(const uint32 InAsynPathQueryID)
+{
+	TObjectPtr<UNavigationSystemV1> NavSys = GetNavigationSystem();
+	if (NavSys != nullptr)
+	{
+		NavSys->AbortAsyncFindPathRequest(InAsynPathQueryID);
+	}
+}
+
 void UMyNavigationSystem::DrawDebugPath(bool InFlag, float InLifeTime)
 {
 	m_DrawDebugPath = InFlag;
 	m_DrawDebugLifeTime = InLifeTime;
+}
+
+void UMyNavigationSystem::DrawPath(FNavPathSharedPtr InPath)
+{
+	if (m_DrawDebugPath == true)
+	{
+		if (InPath != nullptr)
+		{
+			TObjectPtr<UNavigationSystemV1> NavSys = GetNavigationSystem();
+			if (NavSys != nullptr)
+			{
+				ANavigationData* NavData = NavSys->GetDefaultNavDataInstance();
+				if (NavData != nullptr)
+				{
+					const FColor DebugColor = FColor::White;
+					const bool bPersistent = false;
+
+					// draw path
+					InPath->DebugDraw(NavData, DebugColor, nullptr, bPersistent, m_DrawDebugLifeTime);
+				}
+			}
+		}
+	}
 }
