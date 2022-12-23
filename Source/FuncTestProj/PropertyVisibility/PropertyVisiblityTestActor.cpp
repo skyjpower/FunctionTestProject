@@ -11,12 +11,6 @@
 #include "PropertyHandle.h"
 #include "Layout/Visibility.h"
 
-/*
-	커스텀 디테일 패널을 등록해주기 위한 헤더
-*/
-#include "Modules/ModuleManager.h"
-#include "PropertyEditorModule.h"
-
 // Sets default values
 APropertyVisiblityTestActor::APropertyVisiblityTestActor()
 	: m_IntValue(0)
@@ -25,13 +19,6 @@ APropertyVisiblityTestActor::APropertyVisiblityTestActor()
 	, m_SelectedValueType(ESelectedValueType::None)
 {
 	PrimaryActorTick.bCanEverTick = true;
-
-	/*
-		[주의] 이 코드들이 속한 모듈의 StartupModule() 쪽에서 세팅해주는게 적절하나, 테스트 편의 상 이 곳에 작성합니다.
-		: APropertyVisiblityTestActor 클래스의 CustomClassLayout을 새로 만든 FPropertyVisiblityTestActorDetails로 등록
-	*/
-	FPropertyEditorModule& PropertyModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	PropertyModule.RegisterCustomClassLayout("PropertyVisiblityTestActor", FOnGetDetailCustomizationInstance::CreateStatic(&FPropertyVisiblityTestActorDetails::MakeInstance));
 }
 
 // Called when the game starts or when spawned

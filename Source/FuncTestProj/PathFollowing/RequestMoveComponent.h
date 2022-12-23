@@ -156,12 +156,21 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Move To Actor Async", ScriptName = "MoveToActorAsync"))
 		EPathFollowingRequestResult::Type K2_MoveToActorAsync(AActor* InGoal, FRequestMoveParams InMoveParams);
 
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "Spline Move To Location Sync", ScriptName = "SplineMoveToLocation"))
+		EPathFollowingRequestResult::Type K2_SplineMoveToLocation(const FVector& InDestination, FRequestMoveParams InMoveParams, bool InIgnoreSplineHeight);
+
 	/*
 		Request Move Interfaces
 	*/
 	EPathFollowingRequestResult::Type MoveToLocation(const FVector& InDestination, const FRequestMoveParams& InMoveParams);
 	EPathFollowingRequestResult::Type MoveToActor(AActor* InGoal, const FRequestMoveParams& InMoveParams);
 	FPathFollowingRequestResult MoveTo(const FAIMoveRequest& MoveRequest, FNavPathSharedPtr* OutPath = nullptr);
+
+	/*
+		@InIgnoreSplineHeight	: Spline을 2D로 생각하고 작업합니다.
+	*/
+	EPathFollowingRequestResult::Type SplineMoveToLocation(const FVector& InDestination, const FRequestMoveParams& InMoveParams, bool InIgnoreSplineHeight = true);
+	FPathFollowingRequestResult SplineMoveTo(const FAIMoveRequest& MoveRequest, bool InIgnoreSplineHeight);
 
 	/*
 		Request Move Async Interfaces
@@ -187,6 +196,9 @@ protected:
 	virtual void OnUnregister() override;
 
 private:
+	FAIMoveRequest MakeMoveRequest(const FVector& InDestination, const FRequestMoveParams& InMoveParams);
+	FAIMoveRequest MakeMoveRequest(TObjectPtr<AActor> InGoalActor, const FRequestMoveParams& InMoveParams);
+
 	/*
 		이동을 요청하기 전에 해야할 작업 수행
 	*/
@@ -201,6 +213,7 @@ private:
 		길 찾기 수행
 	*/
 	void FindPathForMoveRequest(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery, FNavPathSharedPtr& OutPath) const;
+	void FindSplinePathForMoveRequest(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery, FNavPathSharedPtr& OutPath, FSplinePathSharedPtr& OutSplinePath) const;
 
 	/*
 		비동기 길 찾기 완료 콜백

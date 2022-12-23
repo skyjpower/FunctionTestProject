@@ -12,7 +12,8 @@
 namespace FMyConsole
 {
 	FAutoConsoleVariableRef CVars_MyNavigationSystem[] = {
-			FAutoConsoleVariableRef(TEXT("MyNav.DrawPaths"), UMyNavigationSystem::m_DrawDebugPath, TEXT("Draw Paths"), ECVF_Default)
+			FAutoConsoleVariableRef(TEXT("MyNav.DrawPaths"), UMyNavigationSystem::m_DrawDebugPath, TEXT("Draw Paths"), ECVF_Default),
+			FAutoConsoleVariableRef(TEXT("MyNav.DrawSplinePaths"), UMyNavigationSystem::m_DrawDebugSplinePath, TEXT("Draw Spline Paths"), ECVF_Default),
 	};
 }
 

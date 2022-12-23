@@ -133,30 +133,20 @@ EPathFollowingRequestResult::Type URequestMoveComponent::K2_MoveToActorAsync(AAc
 	return Result.Code;
 }
 
+EPathFollowingRequestResult::Type URequestMoveComponent::K2_SplineMoveToLocation(const FVector& InDestination, FRequestMoveParams InMoveParams, bool InIgnoreSplineHeight)
+{
+	return SplineMoveToLocation(InDestination, InMoveParams, InIgnoreSplineHeight);
+}
+
 EPathFollowingRequestResult::Type URequestMoveComponent::MoveToLocation(const FVector& InDestination, const FRequestMoveParams& InMoveParams)
 {
-	FAIMoveRequest MoveReq(InDestination);
-	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
-	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
-	MoveReq.SetProjectGoalLocation(InMoveParams.ProjectDestinationToNavigation);
-	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
-	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
-	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
-	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
-
+	FAIMoveRequest&& MoveReq = MakeMoveRequest(InDestination, InMoveParams);
 	return MoveTo(MoveReq);
 }
 
 EPathFollowingRequestResult::Type URequestMoveComponent::MoveToActor(AActor* InGoal, const FRequestMoveParams& InMoveParams)
 {
-	FAIMoveRequest MoveReq(InGoal);
-	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
-	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
-	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
-	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
-	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
-	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
-
+	FAIMoveRequest&& MoveReq = MakeMoveRequest(InGoal, InMoveParams);
 	return MoveTo(MoveReq);
 }
 
@@ -233,30 +223,90 @@ FPathFollowingRequestResult URequestMoveComponent::MoveTo(const FAIMoveRequest& 
 	return ResultData;
 }
 
+EPathFollowingRequestResult::Type URequestMoveComponent::SplineMoveToLocation(const FVector& InDestination, const FRequestMoveParams& InMoveParams, bool InIgnoreSplineHeight)
+{
+	FAIMoveRequest&& MoveReq = MakeMoveRequest(InDestination, InMoveParams);
+	return SplineMoveTo(MoveReq, InIgnoreSplineHeight);
+}
+
+FPathFollowingRequestResult URequestMoveComponent::SplineMoveTo(const FAIMoveRequest& MoveRequest, bool InIgnoreSplineHeight)
+{
+	ProcessBeforeRequestMove();
+
+	FPathFollowingRequestResult ResultData;
+	ResultData.Code = EPathFollowingRequestResult::Failed;
+
+	if (MoveRequest.IsValid() == false)
+	{
+		return ResultData;
+	}
+
+	if (HasPathFollowingComponent() == false)
+	{
+		UE_LOG(LogClass, Error, TEXT("MoveTo request failed due missing PathFollowingComponent"));
+		return ResultData;
+	}
+
+	UMyPathFollowingComponent* PathFollowingComponent = m_CachePathFollowingComponent.Get();
+
+	TObjectPtr<APawn> Pawn = GetPawn();
+	if (Pawn == nullptr || Pawn->IsValidLowLevel() == false)
+	{
+		UE_LOG(LogClass, Error, TEXT("Owner pawn[APawn] is invalid"));
+		return ResultData;
+	}
+
+	bool bCanRequestMove = ProcessCanRequestMove(MoveRequest);
+	bool bAlreadyAtGoal = false;
+	if (bCanRequestMove == true)
+	{
+		bAlreadyAtGoal = CheckAlreadyAtGoal(MoveRequest);
+	}
+
+	if (bAlreadyAtGoal == true)
+	{
+		ResultData.MoveId = PathFollowingComponent->RequestMoveWithImmediateFinish(EPathFollowingResult::Success);
+		ResultData.Code = EPathFollowingRequestResult::AlreadyAtGoal;
+	}
+
+	else if (bCanRequestMove == true)
+	{
+		FPathFindingQuery PFQuery;
+
+		const bool bValidQuery = BuildPathfindingQuery(MoveRequest, PFQuery);
+		if (bValidQuery)
+		{
+			FNavPathSharedPtr Path;
+			FSplinePathSharedPtr SplinePath;
+			FindSplinePathForMoveRequest(MoveRequest, PFQuery, Path, SplinePath);
+
+			const FAIRequestID RequestID = Path.IsValid() ? PathFollowingComponent->RequestSplineMove(MoveRequest, Path, FSplinePathParams(SplinePath, InIgnoreSplineHeight)) : FAIRequestID::InvalidRequest;
+			if (RequestID.IsValid())
+			{
+				// bAllowStrafe = MoveRequest.CanStrafe();
+				ResultData.MoveId = RequestID;
+				ResultData.Code = EPathFollowingRequestResult::RequestSuccessful;
+			}
+		}
+	}
+
+	if (ResultData.Code == EPathFollowingRequestResult::Failed)
+	{
+		ResultData.MoveId = PathFollowingComponent->RequestMoveWithImmediateFinish(EPathFollowingResult::Invalid);
+	}
+
+	return ResultData;
+}
+
 FRequestAsyncMoveResult URequestMoveComponent::MoveToLocationAsync(const FVector& InDestination, const FRequestMoveParams& InMoveParams)
 {
-	FAIMoveRequest MoveReq(InDestination);
-	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
-	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
-	MoveReq.SetProjectGoalLocation(InMoveParams.ProjectDestinationToNavigation);
-	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
-	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
-	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
-	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
-
+	FAIMoveRequest&& MoveReq = MakeMoveRequest(InDestination, InMoveParams);
 	return MoveToAsync(MoveReq);
 }
 
 FRequestAsyncMoveResult URequestMoveComponent::MoveToActorAsync(AActor* InGoal, const FRequestMoveParams& InMoveParams)
 {
-	FAIMoveRequest MoveReq(InGoal);
-	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
-	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
-	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
-	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
-	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
-	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
-
+	FAIMoveRequest&& MoveReq = MakeMoveRequest(InGoal, InMoveParams);
 	return MoveToAsync(MoveReq);
 }
 
@@ -434,6 +484,31 @@ void URequestMoveComponent::OnUnregister()
 }
 
 // private ====
+FAIMoveRequest URequestMoveComponent::MakeMoveRequest(const FVector& InDestination, const FRequestMoveParams& InMoveParams)
+{
+	FAIMoveRequest MoveReq(InDestination);
+	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
+	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
+	MoveReq.SetProjectGoalLocation(InMoveParams.ProjectDestinationToNavigation);
+	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
+	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
+	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
+	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
+	return MoveReq;
+}
+
+FAIMoveRequest URequestMoveComponent::MakeMoveRequest(TObjectPtr<AActor> InGoalActor, const FRequestMoveParams& InMoveParams)
+{
+	FAIMoveRequest MoveReq(InGoalActor);
+	MoveReq.SetUsePathfinding(InMoveParams.UsePathfinding);
+	MoveReq.SetAllowPartialPath(InMoveParams.AllowPartialPaths);
+	MoveReq.SetNavigationFilter(InMoveParams.FilterClass);
+	MoveReq.SetAcceptanceRadius(InMoveParams.AcceptanceRadius);
+	MoveReq.SetReachTestIncludesAgentRadius(InMoveParams.StopOnOverlap);
+	MoveReq.SetCanStrafe(InMoveParams.CanStrafe);
+	return MoveReq;
+}
+
 void URequestMoveComponent::ProcessBeforeRequestMove()
 {
 
@@ -477,11 +552,6 @@ bool URequestMoveComponent::BuildPathfindingQuery(const FAIMoveRequest& InMoveRe
 		bResult = true;
 	}
 
-	else
-	{
-		
-	}
-
 	return bResult;
 }
 
@@ -505,6 +575,28 @@ void URequestMoveComponent::FindPathForMoveRequest(const FAIMoveRequest& InMoveR
 				PathResult.Path->EnableRecalculationOnInvalidation(true);
 				OutPath = PathResult.Path;
 			}
+		}
+	}
+}
+
+void URequestMoveComponent::FindSplinePathForMoveRequest(const FAIMoveRequest& InMoveRequest, FPathFindingQuery& InQuery, FNavPathSharedPtr& OutPath, FSplinePathSharedPtr& OutSplinePath) const
+{
+	SCOPE_CYCLE_COUNTER(STAT_AI_Overall);
+
+	TObjectPtr<UMyNavigationSystem> MyNavSystem = UMyFunctionHelpers::GetInstance<UMyNavigationSystem>(GetWorld());
+	if (MyNavSystem != nullptr)
+	{
+		FSplinePathFindingResult PathResult = MyNavSystem->FindSplinePathSync(InQuery);
+		if (PathResult.OriginPathResult.IsSuccessful() == true && PathResult.OriginPathResult.Path.IsValid() == true)
+		{
+			if (InMoveRequest.IsMoveToActorRequest())
+			{
+				PathResult.OriginPathResult.Path->SetGoalActorObservation(*InMoveRequest.GetGoalActor(), 100.0f);
+			}
+
+			PathResult.OriginPathResult.Path->EnableRecalculationOnInvalidation(true);
+			OutPath = PathResult.OriginPathResult.Path;
+			OutSplinePath = PathResult.SplinePath;
 		}
 	}
 }
