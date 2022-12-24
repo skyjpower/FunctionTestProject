@@ -18,6 +18,11 @@ public:
 
 public:
 	/*
+		Path 유효성 검사
+	*/
+	bool IsValid() const;
+
+	/*
 		@InPosition			: 포인트의 위치
 		@InCoordinateSpace	: 로컬 / 월드 좌표계 지정
 		@EInterpCurveMode	: 사용할 Spline Type
@@ -28,6 +33,30 @@ public:
 		FSplineCurves::UpdateSpline() 를 Default Option으로 호출합니다.
 	*/
 	void UpdateSpline();
+	
+	/*
+		주어진 월드 위치(InWorldLocation)로부터 가장 가까운 Spline InputKey 리턴
+	*/
+	float FindInputKeyClosestToWorldLocation(const FVector& InWorldLocation) const;
+	/*
+		주어진 Spline InputKey에 해당하는 Direction 리턴
+	*/
+	FVector GetDirectionAtSplineInputKey(float InKey, ESplineCoordinateSpace::Type CoordinateSpace) const;
+	/*
+		주어진 Spline InputKey에 해당하는 Location 리턴
+	*/
+	FVector GetLocationAtSplineInputKey(float InKey, ESplineCoordinateSpace::Type CoordinateSpace) const;
+	/*
+		주어진 월드 위치(InWorldLocation)로부터 가장 가까운 Spline Distance 리턴
+	*/
+	float GetDistanceClosestToWorldLocation(const FVector& InWorldLocation) const;
+	/*
+		주어진 인풋 키에 알맞은 Spline Distance 리턴
+	*/
+	float GetDistanceAlongSplineAtSplineInputKey(float InKey) const;
+
+	/** Returns the length of the specified spline segment up to the parametric value given */
+	float GetSegmentLength(const int32 Index, const float Param = 1.0f) const;
 
 public:
 	// 중심이 될 Transform
@@ -40,6 +69,9 @@ public:
 private:
 	uint32 m_ID;
 	static uint32 s_UniqueID;
+
+	// Spline path options
+	static int32 s_ReparamStepsPerSegment;
 };
 
 typedef TSharedPtr<FSplinePath, ESPMode::ThreadSafe> FSplinePathSharedPtr;

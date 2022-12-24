@@ -9,6 +9,7 @@ float UMyNavigationSystem::m_DrawDebugLifeTime = 10.0f;
 
 #pragma region FSplinePath
 uint32 FSplinePath::s_UniqueID = uint32(0);
+int32 FSplinePath::s_ReparamStepsPerSegment = 10;
 
 FSplinePath::FSplinePath()
 	: Transform(FTransform::Identity)
@@ -20,6 +21,11 @@ FSplinePath::FSplinePath()
 FSplinePath::~FSplinePath()
 {
 	UE_LOG(LogClass, Log, TEXT("Delete Path, ID[%d]"), m_ID);
+}
+
+bool FSplinePath::IsValid() const
+{
+	return Path.GetSplineLength() > 0.0f;
 }
 
 void FSplinePath::AddSplinePoint(const FVector& InPosition, ESplineCoordinateSpace::Type InCoordinateSpace, ESplinePointType::Type InCurveMode)
@@ -42,13 +48,79 @@ void FSplinePath::UpdateSpline()
 {
 	const bool bClosedLoop = false;
 	const bool bStationaryEndpoints = false;
-	int32 ReparamStepsPerSegment = 10;
 	bool bLoopPositionOverride = false;
 	float LoopPosition = 0.0f;
 	const FVector& Scale3D = FVector(1.0f);
 
 	// leave, arrive tangent가 세팅되도록 Update를 한 번 해줍니다.
-	Path.UpdateSpline(bClosedLoop, bStationaryEndpoints, ReparamStepsPerSegment, bLoopPositionOverride, LoopPosition, Scale3D);
+	Path.UpdateSpline(bClosedLoop, bStationaryEndpoints, s_ReparamStepsPerSegment, bLoopPositionOverride, LoopPosition, Scale3D);
+}
+
+float FSplinePath::FindInputKeyClosestToWorldLocation(const FVector& InWorldLocation) const
+{
+	const FVector LocalLocation = Transform.InverseTransformPosition(InWorldLocation);
+	float Dummy;
+	return Path.Position.InaccurateFindNearest(LocalLocation, Dummy);
+}
+
+FVector FSplinePath::GetDirectionAtSplineInputKey(float InKey, ESplineCoordinateSpace::Type CoordinateSpace) const
+{
+	FVector Direction = Path.Position.EvalDerivative(InKey, FVector::ZeroVector).GetSafeNormal();
+
+	if (CoordinateSpace == ESplineCoordinateSpace::World)
+	{
+		Direction = Transform.TransformVector(Direction);
+		Direction.Normalize();
+	}
+
+	return Direction;
+}
+
+FVector FSplinePath::GetLocationAtSplineInputKey(float InKey, ESplineCoordinateSpace::Type CoordinateSpace) const
+{
+	FVector Location = Path.Position.Eval(InKey, FVector::ZeroVector);
+
+	if (CoordinateSpace == ESplineCoordinateSpace::World)
+	{
+		Location = Transform.TransformPosition(Location);
+	}
+
+	return Location;
+}
+
+float FSplinePath::GetDistanceClosestToWorldLocation(const FVector& InWorldLocation) const
+{
+	float&& InputKey = FindInputKeyClosestToWorldLocation(InWorldLocation);
+
+	return GetDistanceAlongSplineAtSplineInputKey(InputKey);
+}
+
+float FSplinePath::GetDistanceAlongSplineAtSplineInputKey(float InKey) const
+{
+	const int32 NumPoints = Path.Position.Points.Num();
+	const int32 NumSegments = NumPoints - 1;
+
+	if ((InKey >= 0) && (InKey < NumSegments))
+	{
+		const int32 PointIndex = FMath::FloorToInt(InKey);
+		const float Fraction = InKey - PointIndex;
+		const int32 ReparamPointIndex = PointIndex * s_ReparamStepsPerSegment;
+		const float Distance = Path.ReparamTable.Points[ReparamPointIndex].InVal;
+		return Distance + GetSegmentLength(PointIndex, Fraction);
+	}
+
+	else if (InKey >= NumSegments)
+	{
+		return Path.GetSplineLength();
+	}
+
+	return 0.0f;
+}
+
+float FSplinePath::GetSegmentLength(const int32 Index, const float Param) const
+{
+	const bool bClosedLoop = false;
+	return Path.GetSegmentLength(Index, Param, bClosedLoop, Transform.GetScale3D());
 }
 #pragma endregion
 

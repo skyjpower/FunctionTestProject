@@ -26,6 +26,11 @@ public:
 
 	}
 
+	bool IsValid() const
+	{
+		return Path != nullptr && Path->IsValid() == true;
+	}
+
 	void Reset()
 	{
 		Path = nullptr;
@@ -53,6 +58,15 @@ public:
 
 private:
 	bool CreateDebugSplinePath();
+
+	/*
+		일반 이동 함수
+	*/
+	void FollowPathSegment_Normal(float InDeltaTime);
+	/*
+		스플라인 전용 이동 함수
+	*/
+	void FollowPathSegment_Spline(float InDeltaTime);
 
 private:
 	FSplinePathParams m_SplinePathParams;
